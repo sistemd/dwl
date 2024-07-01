@@ -956,6 +956,9 @@ createmon(struct wl_listener *listener, void *data)
 	struct wlr_output_state state;
 	Monitor *m;
 
+	if (edp_disabled && strstr(wlr_output-> name, "eDP"))
+		return;
+
 	if (!wlr_output_init_render(wlr_output, alloc, drw))
 		return;
 
