@@ -1,5 +1,7 @@
 # dwl - dwm for Wayland
 
+**My patches are in the pathes/ directory.**
+
 Join us on our IRC channel: [#dwl on Libera Chat]  
 Or on our [Discord server].
 
