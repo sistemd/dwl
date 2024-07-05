@@ -10,6 +10,7 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
 #include <wlr/backend/libinput.h>
@@ -338,6 +339,8 @@ static void setpsel(struct wl_listener *listener, void *data);
 static void setsel(struct wl_listener *listener, void *data);
 static void setup(void);
 static void spawn(const Arg *arg);
+static void spawn_menu(const Arg *arg);
+static void *menu_thread(void *cmd);
 static void startdrag(struct wl_listener *listener, void *data);
 static void tag(const Arg *arg);
 static void tagmon(const Arg *arg);
@@ -419,6 +422,9 @@ static struct wlr_output_layout *output_layout;
 static struct wlr_box sgeom;
 static struct wl_list mons;
 static Monitor *selmon;
+
+/* A lock to ensure that only one menu is shown at any time. */
+static pthread_mutex_t menu_lock = PTHREAD_MUTEX_INITIALIZER;
 
 #ifdef XWAYLAND
 static void activatex11(struct wl_listener *listener, void *data);
@@ -2713,6 +2719,43 @@ spawn(const Arg *arg)
 		execvp(((char **)arg->v)[0], (char **)arg->v);
 		die("dwl: execvp %s failed:", ((char **)arg->v)[0]);
 	}
+}
+
+void
+spawn_menu(const Arg *arg)
+{
+	pthread_t tid;
+	pthread_create(&tid, NULL, menu_thread, (void *)arg->v);
+}
+
+void *
+menu_thread(void *cmd)
+{
+	int status;
+	pid_t pid;
+
+	if (pthread_mutex_trylock(&menu_lock)) {
+		/* A menu is already displayed. */
+		return NULL;
+	}
+
+	pid = fork();
+
+	/* Execute the menu command in the child process. */
+	if (pid == 0) {
+		dup2(STDERR_FILENO, STDOUT_FILENO);
+		setsid();
+		execvp(((char **)cmd)[0], (char **)cmd);
+		die("dwl: execvp %s failed:", ((char **)cmd)[0]);
+	}
+
+	if (pid < 0)
+		die("dwl: fork failed: %s", strerror(errno));
+
+	/* Wait for the menu to exit. */
+	waitpid(pid, &status, 0);
+	pthread_mutex_unlock(&menu_lock);
+	return NULL;
 }
 
 void
