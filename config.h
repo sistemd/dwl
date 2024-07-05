@@ -4,9 +4,6 @@
                         ((hex >> 8) & 0xFF) / 255.0f, \
                         (hex & 0xFF) / 255.0f }
 
-/* For disabling the laptop monitor */
-static const int edp_disabled = 1;
-
 /* appearance */
 static const int sloppyfocus               = 1;  /* focus follows mouse */
 static const int bypass_surface_visibility = 0;  /* 1 means idle inhibitors will disable idle tracking even if it's surface isn't visible  */
@@ -46,8 +43,9 @@ static const Layout layouts[] = {
 */
 /* NOTE: ALWAYS add a fallback rule, even if you are completely sure it won't be used */
 static const MonitorRule monrules[] = {
-	/* name       mfact  nmaster scale layout       rotate/reflect                x    y */
-	{ "eDP-1",    0.5f,  1,        1.7,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   0,   0 },
+	/* name       mfact  nmaster   scale   layout       rotate/reflect                x    y */
+	{ "eDP-1",    0.5f,  1,        1.7f,   &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   0,   0 },
+	{ "HDMI",     0.5f,  1,        1.2f,   &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   0,   0 },
 	/* defaults */
 	{ NULL,       0.5f, 1,         1,      &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   0,   0 },
 };

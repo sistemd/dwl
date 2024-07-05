@@ -724,9 +724,10 @@ cleanup(void)
 void
 cleanupmon(struct wl_listener *listener, void *data)
 {
-	Monitor *m = wl_container_of(listener, m, destroy);
+	Monitor *mon, *m = wl_container_of(listener, m, destroy);
 	LayerSurface *l, *tmp;
 	size_t i;
+	bool no_monitors;
 
 	/* m->layers[i] are intentionally not unlinked */
 	for (i = 0; i < LENGTH(m->layers); i++) {
@@ -745,6 +746,27 @@ cleanupmon(struct wl_listener *listener, void *data)
 	closemon(m);
 	wlr_scene_node_destroy(&m->fullscreen_bg->node);
 	free(m);
+
+	/* Check if all monitors are disabled. */
+	no_monitors = true;
+	wl_list_for_each(mon, &mons, link) {
+		if (mon->wlr_output->enabled) {
+			no_monitors = false;
+			break;
+		}
+	}
+	/* If all monitors are disabled, enable the eDP output. */
+	if (no_monitors) {
+		wl_list_for_each(mon, &mons, link) {
+			if (strstr(mon->wlr_output->name, "eDP")) {
+				wlr_output_enable(mon->wlr_output, true);
+				wlr_output_commit(mon->wlr_output);
+				break;
+			}
+		}
+	}
+
+	updatemons(NULL, NULL);
 }
 
 void
@@ -754,6 +776,7 @@ closemon(Monitor *m)
 	 * move closed monitor's clients to the focused one */
 	Client *c;
 	int i = 0, nmons = wl_list_length(&mons);
+
 	if (!nmons) {
 		selmon = NULL;
 	} else if (m == selmon) {
@@ -955,9 +978,19 @@ createmon(struct wl_listener *listener, void *data)
 	size_t i;
 	struct wlr_output_state state;
 	Monitor *m;
+	struct wlr_output_mode *md, *mode = NULL;
 
-	if (edp_disabled && strstr(wlr_output-> name, "eDP"))
-		return;
+	/* Use a specific size for external displays. Otherwise use the
+	 * display preferred size. This specific size is the size
+	 * recommended for the monitor I normally use. */
+	if (!strstr(wlr_output->name, "eDP")) {
+		wl_list_for_each(md, &wlr_output->modes, link) {
+			if (md->width == 3440 && md->height == 1440) {
+				mode = md;
+				break;
+			}
+		}
+	}
 
 	if (!wlr_output_init_render(wlr_output, alloc, drw))
 		return;
@@ -986,11 +1019,11 @@ createmon(struct wl_listener *listener, void *data)
 		}
 	}
 
-	/* The mode is a tuple of (width, height, refresh rate), and each
-	 * monitor supports only a specific set of modes. We just pick the
-	 * monitor's preferred mode; a more sophisticated compositor would let
-	 * the user configure it. */
-	wlr_output_state_set_mode(&state, wlr_output_preferred_mode(wlr_output));
+	if (mode == NULL) {
+		mode = wlr_output_preferred_mode(wlr_output);
+	}
+
+	wlr_output_state_set_mode(&state, mode);
 
 	/* Set up event listeners */
 	LISTEN(&wlr_output->events.frame, &m->frame, rendermon);
@@ -2873,7 +2906,23 @@ updatemons(struct wl_listener *listener, void *data)
 			= wlr_output_configuration_v1_create();
 	Client *c;
 	struct wlr_output_configuration_head_v1 *config_head;
-	Monitor *m;
+	Monitor *m, *extmon = NULL;
+
+	/* If an external display is in use, don't use any other display. */
+	wl_list_for_each(m, &mons, link) {
+		if (!strstr(m->wlr_output->name, "eDP")) {
+			extmon = m;
+			break;
+		}
+	}
+	if (extmon) {
+		wl_list_for_each(m, &mons, link) {
+			if (m == extmon)
+				continue;
+			wlr_output_enable(m->wlr_output, false);
+			wlr_output_commit(m->wlr_output);
+		}
+	}
 
 	/* First remove from the layout the disabled monitors */
 	wl_list_for_each(m, &mons, link) {
